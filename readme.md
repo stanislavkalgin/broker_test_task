@@ -12,7 +12,7 @@
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/your-repo/myproject.git](https://github.com/stanislavkalgin/broker_test_task.git
+    git clone https://github.com/stanislavkalgin/broker_test_task.git
     cd project
     ```
 
