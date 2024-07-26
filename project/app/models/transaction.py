@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal
 
 from django.db import models, transaction
+from django.db.models import Sum
 
 from .wallet import Wallet
 from ..exceptions import NegativeBalanceException
@@ -17,37 +18,31 @@ class Transaction(models.Model):
     def save(self, *args, **kwargs):
         """
         Custom save method to ensure wallet balance integrity.
-        This method implements the ledger system approach, where the current balance
-        is stored in the Wallet model and updated with each transaction. It ensures
-        atomicity and consistency using database transactions and row locking.
+        This method implements a hybrid approach, combining a ledger-based system with precomputed balances.
+        Here, each transaction is recorded in the Transaction table, and the wallet's balance is updated in real-time.
 
-        The approach used here is a good fit for applications requiring:
-        - Real-time balance updates.
-        - High transactional throughput.
-        - Simple and direct balance access.
+        Key Features:
+        - **Atomic Transactions**: Using `transaction.atomic()` to ensure that all database operations within the block
+          are completed successfully or rolled back entirely to maintain consistency.
+        - **Row Locking**: `select_for_update()` is employed to lock the wallet record, preventing race conditions
+          and ensuring accurate balance updates even under concurrent transactions.
+        - **Integrity Checks**: The custom exception `NegativeBalanceException` ensures that transactions resulting in
+          a negative balance are not committed, maintaining the integrity of wallet balances.
 
         Alternative Approaches:
-        1. **Event Sourcing**: Instead of directly updating the balance, we can store each
-           transaction as an event and derive the balance by replaying events. This approach
-           is highly auditable and flexible for complex transaction types but may require
-           more computation for balance retrieval.
-        2. **Snapshotting**: In combination with event sourcing, we can periodically
-           save the state (snapshot) of the wallet balance to speed up balance retrieval
-           by reducing the number of events to replay.
-        3. **Double-Entry Ledger System**: Similar to traditional accounting, each
-           transaction is recorded twice (debit and credit), which ensures data integrity
-           and provides a clear audit trail. This is particularly useful for more complex
-           financial systems.
+        - **Ledger-Based System**: Calculate the balance on-the-fly by summing all transactions related to a wallet.
+          This approach offers high accuracy and traceability but can be slower for wallets with a large number of transactions.
+        - **Precomputed Balance with Periodic Reconciliation**: Maintain a precomputed balance that is updated in real-time
+          and periodically reconcile with the transaction log to ensure accuracy. This balances performance and consistency.
+        - **Event Sourcing**: Store events representing transactions and other changes, deriving the current state (balance)
+          from these events. This provides high flexibility and traceability but requires a more complex infrastructure.
+        - **Blockchain and Distributed Ledger Technology (DLT)**: Record transactions on a blockchain, using smart contracts
+          to automate balance updates and enforce rules. This approach offers high security and immutability but can be
+          resource-intensive and complex to implement.
 
-        The choice of approach depends on the company's specific requirements such as:
-        - Need for auditability and historical analysis.
-        - Performance and scalability requirements.
-        - Complexity of financial transactions.
+        By using this hybrid approach, we aim to balance performance, accuracy, and complexity, ensuring fast balance
+        retrieval and consistent updates through atomic transactions and integrity checks.
 
-        By using `select_for_update`, we prevent race conditions and ensure that the balance
-        is accurately updated even under concurrent transactions. The custom exception
-        `NegativeBalanceException` ensures that transactions resulting in a negative
-        balance are not committed.
         :param args:
         :param kwargs:
         :return:
@@ -57,7 +52,7 @@ class Transaction(models.Model):
             if is_new:
                 wallet = Wallet.objects.select_for_update().get(id=self.wallet_id)
                 super().save(*args, **kwargs)
-                wallet.balance += self.amount
+                wallet.balance = Transaction.objects.filter(wallet=wallet).aggregate(amount=Sum('amount')).get('amount')
                 if wallet.balance < Decimal('0'):
                     # Expected to roll back transaction creation
                     raise NegativeBalanceException(f'Trying to set negative amount for wallet {wallet.pk}.'
