@@ -14,11 +14,6 @@ services:
 
   web:
     build: .
-    command: >
-      sh -c "
-        poetry run python manage.py migrate &&
-        poetry run python manage.py runserver 0.0.0.0:8000
-      "
     volumes:
       - .:/app
     ports:
@@ -26,10 +21,10 @@ services:
     depends_on:
       - db
     environment:
-      - DJANGO_SECRET_KEY=your-secret-key
-      - DJANGO_DEBUG=True
-      - MYSQL_DATABASE=mydatabase
-      - MYSQL_USER=myuser
-      - MYSQL_PASSWORD=mypassword
-      - MYSQL_HOST=db
-      - MYSQL_PORT=3306
+      DJANGO_SECRET_KEY: 'your-secret-key'
+      DJANGO_DEBUG: 'True'
+      MYSQL_DATABASE: 'mydatabase'
+      MYSQL_USER: 'myuser'
+      MYSQL_PASSWORD: 'mypassword'
+      MYSQL_HOST: 'db'
+      MYSQL_PORT: '3306'
